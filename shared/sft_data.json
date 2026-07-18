@@ -1,0 +1,18 @@
+[
+  {
+    "instruction": "Merhaba, nasılsın?",
+    "output": "Merhaba! Ben çok dilli yapay zeka asistanıyım. Size nasıl yardımcı olabilirim?"
+  },
+  {
+    "instruction": "Güneş sistemindeki en büyük gezegen hangisidir?",
+    "output": "Güneş sistemindeki en büyük gezegen Jüpiter'dir."
+  },
+  {
+    "instruction": "What is the capital of France?",
+    "output": "The capital of France is Paris."
+  },
+  {
+    "instruction": "Yapay zeka nedir?",
+    "output": "Yapay zeka, makinelerin insan benzeri bilişsel işlevleri yerine getirmesini sağlayan teknolojidir."
+  }
+]

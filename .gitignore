@@ -1,0 +1,63 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.venv_windows/
+
+# OS/IDE configurations
+.vscode/
+.idea/
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Rust & Node compilation build folders
+target/
+.target/
+node_modules/
+
+# Project specific ignores (Large binaries & local databases)
+*.zip
+*.bin
+*.pt
+*.db
+*.log
+*.txt
+shared/checkpoints/
+shared/metrics.db
+shared/clean_data_filtered.bin
+shared/quality_classifier.bin
+shared/ham_veri.txt
+shared/*.txt
+python_training/shared/
+python_training/.venv/
+python_training/__pycache__/
+temp_sample.txt

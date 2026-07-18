@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # 1. TypeScript Real-time Metrics Dashboard Service
+  dashboard:
+    build:
+      context: ./ts_dashboard
+      dockerfile: Dockerfile
+    container_name: antigravity_dashboard
+    ports:
+      - "4001:4001"
+    volumes:
+      # Mount shared metrics database from host to container in read-only mode
+      - ./shared:/app/shared:ro
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      
+  # 2. Simulated training node (Optional example of how cluster elements run)
+  # training_node_01:
+  #   image: python:3.10-slim
+  #   container_name: llama_training_node_01
+  #   volumes:
+  #     - .:/workspace
+  #   working_dir: /workspace
+  #   command: python python_training/train.py --data_path shared/mock_data.bin --node_id node-01
+  #   restart: on-failure

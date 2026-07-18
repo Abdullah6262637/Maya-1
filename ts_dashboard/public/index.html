@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity — Çok Dilli AI Eğitim İzleme Paneli</title>
+  <!-- Google Fonts: Outfit (Header), JetBrains Mono (Stats) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- ApexCharts CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <!-- Tailwind Config for Custom Colors & Fonts -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          boxShadow: {
+            glow: '0 0 20px rgba(139, 92, 246, 0.15)',
+            'glow-emerald': '0 0 20px rgba(16, 185, 129, 0.3)',
+            'glow-violet': '0 0 25px rgba(139, 92, 246, 0.4)',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Premium visual effects */
+    body {
+      background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #030712 70%);
+      min-height: 100vh;
+    }
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .neon-border-violet {
+      box-shadow: 0 0 10px rgba(139, 92, 246, 0.1), inset 0 0 10px rgba(139, 92, 246, 0.05);
+      border-color: rgba(139, 92, 246, 0.2);
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(3, 7, 18, 0.5);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(139, 92, 246, 0.3);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(139, 92, 246, 0.5);
+    }
+  </style>
+</head>
+<body class="text-slate-100 font-sans p-6 overflow-x-hidden">
+
+  <!-- Header -->
+  <header class="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div class="flex items-center gap-4">
+      <div class="h-12 w-12 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center shadow-glow-violet animate-pulse">
+        <span class="text-xl font-bold tracking-wider text-white">AG</span>
+      </div>
+      <div>
+        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-violet-400">
+          ANTIGRAVITY
+        </h1>
+        <p class="text-xs md:text-sm text-slate-400 tracking-wide font-light">
+          Çok Dilli Yapay Zeka Sistemi &bull; Gerçek Zamanlı Eğitim İzleme Paneli
+        </p>
+      </div>
+    </div>
+    
+    <!-- Status Badges -->
+    <div class="flex items-center flex-wrap gap-3">
+      <!-- WS Status -->
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 text-xs font-medium">
+        <span id="ws-dot" class="h-2 w-2 rounded-full bg-red-500 animate-ping"></span>
+        <span id="ws-text" class="text-slate-400">Sunucu Bağlantısı Yok</span>
+      </div>
+      
+      <!-- Node 1 Status -->
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 text-xs font-medium">
+        <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-glow-emerald"></span>
+        <span class="text-slate-400">Node-01: Aktif</span>
+      </div>
+      
+      <!-- Node 2 Status -->
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 text-xs font-medium">
+        <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-glow-emerald"></span>
+        <span class="text-slate-400">Node-02: Aktif</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="max-w-7xl mx-auto mb-6 flex gap-4 border-b border-slate-800 pb-2">
+    <button id="tab-dashboard" onclick="switchTab('dashboard')" class="px-4 py-2 border-b-2 border-violet-500 font-bold text-white transition-all cursor-pointer">
+      İzleme Paneli (Metrics)
+    </button>
+    <button id="tab-playground" onclick="switchTab('playground')" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-bold transition-all cursor-pointer">
+      Sohbet Paneli (Playground)
+    </button>
+  </nav>
+
+  <!-- Dashboard View Container -->
+  <div id="view-dashboard">
+    <!-- Main Grid -->
+    <main class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    
+    <!-- Stats Cards -->
+    <div class="glass-panel neon-border-violet rounded-2xl p-6 transition-all duration-300 hover:translate-y-[-2px] hover:border-violet-500/40">
+      <div class="text-xs font-bold text-slate-400 tracking-wider uppercase mb-1">Mevcut Adım</div>
+      <div id="stat-step" class="text-3xl font-bold font-mono tracking-tight text-white">-</div>
+      <div class="text-xs text-violet-400 mt-2 flex items-center gap-1">
+        <span>Hedef: 1,000 Adım</span>
+      </div>
+    </div>
+
+    <div class="glass-panel neon-border-violet rounded-2xl p-6 transition-all duration-300 hover:translate-y-[-2px] hover:border-violet-500/40">
+      <div class="text-xs font-bold text-slate-400 tracking-wider uppercase mb-1">Eğitim Kaybı (Loss)</div>
+      <div id="stat-loss" class="text-3xl font-bold font-mono tracking-tight text-violet-400">-</div>
+      <div class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+        <span>Bölüm Hedefi: ~1.0000</span>
+      </div>
+    </div>
+
+    <div class="glass-panel neon-border-violet rounded-2xl p-6 transition-all duration-300 hover:translate-y-[-2px] hover:border-violet-500/40">
+      <div class="text-xs font-bold text-slate-400 tracking-wider uppercase mb-1">Hız (Throughput)</div>
+      <div id="stat-speed" class="text-3xl font-bold font-mono tracking-tight text-white">-</div>
+      <div class="text-xs text-emerald-400 mt-2 flex items-center gap-1">
+        <span>tokens / saniye</span>
+      </div>
+    </div>
+
+    <div class="glass-panel neon-border-violet rounded-2xl p-6 transition-all duration-300 hover:translate-y-[-2px] hover:border-violet-500/40">
+      <div class="text-xs font-bold text-slate-400 tracking-wider uppercase mb-1">Adım Süresi</div>
+      <div id="stat-time" class="text-3xl font-bold font-mono tracking-tight text-white">-</div>
+      <div class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+        <span>milisaniye</span>
+      </div>
+    </div>
+
+    <!-- Charts Area -->
+    <div class="md:col-span-3 glass-panel rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold tracking-tight text-white">Eğitim Kayıp Grafiği (Loss Curve)</h2>
+        <span class="text-xs text-slate-400">Canlı Güncelleme (2s)</span>
+      </div>
+      <div id="loss-chart" class="w-full h-80"></div>
+    </div>
+
+    <div class="glass-panel rounded-2xl p-6 flex flex-col justify-between">
+      <div>
+        <h2 class="text-lg font-bold tracking-tight text-white mb-4">Küme Performansı</h2>
+        <div class="space-y-4">
+          <div>
+            <div class="flex justify-between text-xs text-slate-400 mb-1">
+              <span>GPU Kullanımı</span>
+              <span class="text-violet-400 font-bold font-mono">92%</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-1.5">
+              <div class="bg-violet-500 h-1.5 rounded-full" style="width: 92%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs text-slate-400 mb-1">
+              <span>VRAM Kullanımı</span>
+              <span class="text-violet-400 font-bold font-mono">18.4 GB / 24 GB</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-1.5">
+              <div class="bg-violet-500 h-1.5 rounded-full" style="width: 76%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs text-slate-400 mb-1">
+              <span>Disk Okuma I/O</span>
+              <span class="text-emerald-400 font-bold font-mono">Optimum (mmap)</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-1.5">
+              <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 98%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Fault Tolerance Simulation -->
+      <div class="mt-6 pt-6 border-t border-slate-800">
+        <h3 class="text-sm font-bold text-white mb-2">Simülatör Paneli</h3>
+        <button onclick="simulateCrash()" class="w-full py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 hover:border-red-500/50 text-red-200 text-xs font-semibold rounded-lg transition-all duration-300 cursor-pointer">
+          Düğüm Çökmesi Tetikle (Go + Elixir)
+        </button>
+      </div>
+    </div>
+
+    <!-- Secondary Charts Area -->
+    <div class="md:col-span-2 glass-panel rounded-2xl p-6">
+      <h2 class="text-lg font-bold tracking-tight text-white mb-4">Veri Akış Hızı (Throughput)</h2>
+      <div id="speed-chart" class="w-full h-64"></div>
+    </div>
+
+    <div class="md:col-span-2 glass-panel rounded-2xl p-6">
+      <h2 class="text-lg font-bold tracking-tight text-white mb-4">Adım Latansı (Step Latency)</h2>
+      <div id="latency-chart" class="w-full h-64"></div>
+    </div>
+  </main>
+  </div>
+
+  <!-- Playground View (Hidden by default) -->
+  <div id="view-playground" class="max-w-7xl mx-auto hidden grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <!-- Settings Panel -->
+    <div class="glass-panel neon-border-violet rounded-2xl p-6 flex flex-col gap-4">
+      <h2 class="text-lg font-bold tracking-tight text-white mb-2">Çıkarım Ayarları</h2>
+      
+      <div>
+        <label class="text-xs text-slate-400 font-semibold block mb-1">Model Checkpoint</label>
+        <select id="chat-checkpoint" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 text-sm focus:border-violet-500 outline-none">
+          <option value="sft_1b">sft_1b (Fine-tuned - 1.5B)</option>
+          <option value="sft_checkpoint.pt">sft_checkpoint.pt (Fine-tuned)</option>
+          <option value="ckpt_step_48000.pt">ckpt_step_48000.pt (Base Model - 48k)</option>
+          <option value="ckpt_step_21978.pt">ckpt_step_21978.pt (Base Model - 22k)</option>
+          <option value="ckpt_step_49.pt">ckpt_step_49.pt (Base Model - Old)</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400 font-semibold block mb-1 flex justify-between">
+          <span>Sıcaklık (Temperature)</span>
+          <span id="val-temp" class="text-violet-400 font-bold font-mono">0.7</span>
+        </label>
+        <input id="chat-temp" type="range" min="0.1" max="2.0" step="0.1" value="0.7" oninput="document.getElementById('val-temp').innerText = this.value" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-violet-500">
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400 font-semibold block mb-1 flex justify-between">
+          <span>Top-P (Nucleus)</span>
+          <span id="val-topp" class="text-violet-400 font-bold font-mono">0.9</span>
+        </label>
+        <input id="chat-topp" type="range" min="0.1" max="1.0" step="0.05" value="0.9" oninput="document.getElementById('val-topp').innerText = this.value" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-violet-500">
+      </div>
+    </div>
+
+    <!-- Chat Console -->
+    <div class="md:col-span-3 glass-panel rounded-2xl p-6 flex flex-col justify-between h-[500px]">
+      <!-- Chat Messages History -->
+      <div id="chat-history" class="flex-1 overflow-y-auto space-y-4 pr-2 mb-4 max-h-[380px]">
+        <!-- Welcome Message -->
+        <div class="flex items-start gap-3">
+          <div class="h-8 w-8 rounded-lg bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
+            <span class="text-xs font-bold text-white">AI</span>
+          </div>
+          <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl px-4 py-2.5 max-w-[85%]">
+            <p class="text-sm text-slate-200">Merhaba! Ben Maya-1 mimarili çok dilli yapay zeka asistanıyım. Bir checkpoint seçerek benimle sohbet etmeye başlayabilirsiniz!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input Area -->
+      <div class="flex gap-3 items-center border-t border-slate-800/80 pt-4">
+        <textarea id="chat-input" placeholder="Bir mesaj yazın..." rows="1" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:border-violet-500/80 focus:ring-1 focus:ring-violet-500/30 outline-none resize-none overflow-y-hidden" onkeydown="if(event.keyCode===13 && !event.shiftKey) { event.preventDefault(); sendChatMessage(); }"></textarea>
+        <button id="chat-send" onclick="sendChatMessage()" class="h-11 w-11 rounded-xl bg-violet-600 hover:bg-violet-500 flex items-center justify-center text-white shadow-glow-violet transition-all cursor-pointer">
+          <svg class="h-5 w-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="max-w-7xl mx-auto text-center text-xs text-slate-500 mt-12 mb-6">
+    Antigravity AI Platform &bull; Tüm Hakları Saklıdır &copy; 2026
+  </footer>
+
+  <script>
+    // ----------------------------------------------------
+    // Chart Definitions using ApexCharts
+    // ----------------------------------------------------
+    const defaultChartOptions = {
+      chart: {
+        type: 'area',
+        background: 'transparent',
+        foreColor: '#94a3b8',
+        toolbar: { show: false },
+        animations: { enabled: true, easing: 'linear', dynamicAnimation: { speed: 1000 } }
+      },
+      grid: { borderColor: 'rgba(255,255,255,0.05)', strokeDashArray: 4 },
+      stroke: { curve: 'smooth', width: 2 },
+      dataLabels: { enabled: false },
+      tooltip: { theme: 'dark' }
+    };
+
+    // Loss Chart
+    const lossOptions = {
+      ...defaultChartOptions,
+      series: [{ name: 'Loss', data: [] }],
+      xaxis: { title: { text: 'Adım (Step)' }, labels: { show: true } },
+      yaxis: { title: { text: 'Kayıp (Loss)' }, decimalsInFloat: 4 },
+      colors: ['#8b5cf6'],
+      fill: {
+        type: 'gradient',
+        gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stopOpacity: 0 }
+      }
+    };
+    const lossChart = new ApexCharts(document.querySelector("#loss-chart"), lossOptions);
+    lossChart.render();
+
+    // Speed Chart
+    const speedOptions = {
+      ...defaultChartOptions,
+      series: [{ name: 'Tokens/Sec', data: [] }],
+      xaxis: { title: { text: 'Adım (Step)' } },
+      yaxis: { title: { text: 'Tokens / Saniye' } },
+      colors: ['#10b981'],
+      fill: {
+        type: 'gradient',
+        gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stopOpacity: 0 }
+      }
+    };
+    const speedChart = new ApexCharts(document.querySelector("#speed-chart"), speedOptions);
+    speedChart.render();
+
+    // Latency Chart
+    const latencyOptions = {
+      ...defaultChartOptions,
+      chart: { ...defaultChartOptions.chart, type: 'line' },
+      series: [{ name: 'Latency (ms)', data: [] }],
+      xaxis: { title: { text: 'Adım (Step)' } },
+      yaxis: { title: { text: 'Milisaniye' } },
+      colors: ['#f59e0b']
+    };
+    const latencyChart = new ApexCharts(document.querySelector("#latency-chart"), latencyOptions);
+    latencyChart.render();
+
+    // ----------------------------------------------------
+    // WebSocket & API Integration
+    // ----------------------------------------------------
+    let socket;
+    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsPort = window.location.port ? `:${window.location.port}` : "";
+    const wsUri = `${wsProto}//${window.location.hostname}${wsPort}/`;
+
+    // Local data storage for charts
+    let steps = [];
+    let lossData = [];
+    let speedData = [];
+    let latencyData = [];
+
+    function initWebSocket() {
+      console.log("Connecting to WebSocket server:", wsUri);
+      socket = new WebSocket(wsUri);
+
+      socket.onopen = () => {
+        console.log("Connected to server.");
+        const dot = document.getElementById("ws-dot");
+        const text = document.getElementById("ws-text");
+        
+        dot.className = "h-2 w-2 rounded-full bg-emerald-500 shadow-glow-emerald animate-pulse";
+        text.innerText = "Sunucu Bağlantısı Aktif";
+        text.className = "text-emerald-400";
+      };
+
+      socket.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "metrics") {
+          processIncomingMetrics(msg.data);
+        } else if (msg.type === "chat_token") {
+          appendChatToken(msg.data);
+        } else if (msg.type === "chat_end") {
+          finalizeChatGeneration();
+        }
+      };
+
+      socket.onclose = () => {
+        console.log("Connection closed.");
+        const dot = document.getElementById("ws-dot");
+        const text = document.getElementById("ws-text");
+        
+        dot.className = "h-2 w-2 rounded-full bg-red-500 animate-ping";
+        text.innerText = "Sunucu Bağlantısı Yok";
+        text.className = "text-slate-400";
+
+        // Try to reconnect in 5 seconds
+        setTimeout(initWebSocket, 5000);
+      };
+    }
+
+    function processIncomingMetrics(data) {
+      // Group metrics by step
+      const metricsByStep = {};
+      
+      data.forEach(item => {
+        if (!metricsByStep[item.step]) {
+          metricsByStep[item.step] = {};
+        }
+        metricsByStep[item.step][item.name] = item.value;
+      });
+
+      // Sort steps
+      const sortedSteps = Object.keys(metricsByStep).map(Number).sort((a,b) => a - b);
+
+      sortedSteps.forEach(step => {
+        const stepMetrics = metricsByStep[step];
+        
+        // Update stats card UI
+        document.getElementById("stat-step").innerText = step;
+        
+        if (stepMetrics.loss !== undefined) {
+          document.getElementById("stat-loss").innerText = stepMetrics.loss.toFixed(4);
+          lossData.push({ x: step, y: stepMetrics.loss });
+        }
+        if (stepMetrics.tokens_per_sec !== undefined) {
+          document.getElementById("stat-speed").innerText = Math.round(stepMetrics.tokens_per_sec).toLocaleString();
+          speedData.push({ x: step, y: stepMetrics.tokens_per_sec });
+        }
+        if (stepMetrics.step_time_ms !== undefined) {
+          document.getElementById("stat-time").innerText = Math.round(stepMetrics.step_time_ms);
+          latencyData.push({ x: step, y: stepMetrics.step_time_ms });
+        }
+      });
+
+      // Limit charts data to last 50 points to prevent browser freeze
+      if (lossData.length > 50) lossData.shift();
+      if (speedData.length > 50) speedData.shift();
+      if (latencyData.length > 50) latencyData.shift();
+
+      // Update ApexCharts series
+      lossChart.updateSeries([{ data: lossData }]);
+      speedChart.updateSeries([{ data: speedData }]);
+      latencyChart.updateSeries([{ data: latencyData }]);
+    }
+
+    // Load initial values from the REST API
+    async function loadHistoricalData() {
+      try {
+        const fetchMetric = async (name) => {
+          const res = await fetch(`/api/metrics/${name}`);
+          return res.json();
+        };
+
+        const losses = await fetchMetric('loss');
+        const speeds = await fetchMetric('tokens_per_sec');
+        const latencies = await fetchMetric('step_time_ms');
+
+        lossData = losses.map(d => ({ x: d.step, y: d.value }));
+        speedData = speeds.map(d => ({ x: d.step, y: d.value }));
+        latencyData = latencies.map(d => ({ x: d.step, y: d.value }));
+
+        if (lossData.length > 0) {
+          const lastStep = lossData[lossData.length - 1].x;
+          document.getElementById("stat-step").innerText = lastStep;
+          document.getElementById("stat-loss").innerText = lossData[lossData.length - 1].y.toFixed(4);
+        }
+        if (speedData.length > 0) {
+          document.getElementById("stat-speed").innerText = Math.round(speedData[speedData.length - 1].y).toLocaleString();
+        }
+        if (latencyData.length > 0) {
+          document.getElementById("stat-time").innerText = Math.round(latencyData[latencyData.length - 1].y);
+        }
+
+        lossChart.updateSeries([{ data: lossData }]);
+        speedChart.updateSeries([{ data: speedData }]);
+        latencyChart.updateSeries([{ data: latencyData }]);
+      } catch (err) {
+        console.log("No historical data to load yet or server is unreachable. Starting clean.");
+      }
+    }
+
+    // simulator crash test
+    async function simulateCrash() {
+      if (confirm("Düğüm çökmesini (Node Crash) tetiklemek istediğinize emin misiniz?\nGo Scheduler çöküşü saptayacak ve Elixir Supervisor'a kurtarma talimatı gönderecektir.")) {
+        try {
+          const res = await fetch('http://localhost:4000/node_down?addr=localhost:8001', { method: 'POST' });
+          const json = await res.json();
+          alert("Failover Tetiklendi!\nElixir Loglarını inceleyebilirsiniz.\nYanıt: " + JSON.stringify(json));
+        } catch (e) {
+          alert("Hata: Elixir sunucusu (port 4000) ayakta değil. Lütfen Elixir supervisor'ı başlatın.");
+        }
+      }
+    }
+
+    // ----------------------------------------------------
+    // Tab and Chat Playground UI Logic
+    // ----------------------------------------------------
+    let currentBotBubble = null;
+    let isGenerating = false;
+
+    function switchTab(tab) {
+      const dbView = document.getElementById("view-dashboard");
+      const pgView = document.getElementById("view-playground");
+      const dbTab = document.getElementById("tab-dashboard");
+      const pgTab = document.getElementById("tab-playground");
+
+      if (tab === "dashboard") {
+        dbView.classList.remove("hidden");
+        pgView.classList.add("hidden");
+        dbTab.className = "px-4 py-2 border-b-2 border-violet-500 font-bold text-white transition-all cursor-pointer";
+        pgTab.className = "px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-bold transition-all cursor-pointer";
+      } else {
+        dbView.classList.add("hidden");
+        pgView.classList.remove("hidden");
+        dbTab.className = "px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-bold transition-all cursor-pointer";
+        pgTab.className = "px-4 py-2 border-b-2 border-violet-500 font-bold text-white transition-all cursor-pointer";
+      }
+    }
+
+    function sendChatMessage() {
+      if (isGenerating) return;
+      
+      const inputEl = document.getElementById("chat-input");
+      const prompt = inputEl.value.trim();
+      if (!prompt) return;
+
+      inputEl.value = "";
+      isGenerating = true;
+
+      // Append User message to history
+      const historyEl = document.getElementById("chat-history");
+      const userBubble = document.createElement("div");
+      userBubble.className = "flex items-start gap-3 justify-end";
+      userBubble.innerHTML = `
+        <div class="bg-violet-600/30 border border-violet-500/30 rounded-2xl px-4 py-2.5 max-w-[85%] text-right">
+          <p class="text-sm text-slate-200">${prompt}</p>
+        </div>
+        <div class="h-8 w-8 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0">
+          <span class="text-xs font-bold text-slate-300">U</span>
+        </div>
+      `;
+      historyEl.appendChild(userBubble);
+      historyEl.scrollTop = historyEl.scrollHeight;
+
+      // Create Bot bubble placeholder
+      currentBotBubble = document.createElement("div");
+      currentBotBubble.className = "flex items-start gap-3";
+      currentBotBubble.innerHTML = `
+        <div class="h-8 w-8 rounded-lg bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center flex-shrink-0 animate-pulse">
+          <span class="text-xs font-bold text-white">AI</span>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl px-4 py-2.5 max-w-[85%]">
+          <p id="active-bot-text" class="text-sm text-slate-200 font-mono"></p>
+        </div>
+      `;
+      historyEl.appendChild(currentBotBubble);
+      historyEl.scrollTop = historyEl.scrollHeight;
+
+      // Send chat request payload over WS
+      const checkpoint = document.getElementById("chat-checkpoint").value;
+      const temperature = parseFloat(document.getElementById("chat-temp").value);
+      const top_p = parseFloat(document.getElementById("chat-topp").value);
+
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+          type: "chat_request",
+          data: { prompt, checkpoint, temperature, top_p }
+        }));
+      } else {
+        document.getElementById("active-bot-text").innerText = "Hata: Sunucu bağlantısı aktif değil.";
+        finalizeChatGeneration();
+      }
+    }
+
+    function appendChatToken(token) {
+      const textEl = document.getElementById("active-bot-text");
+      if (textEl) {
+        textEl.innerText += token;
+        const historyEl = document.getElementById("chat-history");
+        historyEl.scrollTop = historyEl.scrollHeight;
+      }
+    }
+
+    function finalizeChatGeneration() {
+      isGenerating = false;
+      if (currentBotBubble) {
+        const botIcon = currentBotBubble.querySelector(".animate-pulse");
+        if (botIcon) botIcon.classList.remove("animate-pulse");
+      }
+      currentBotBubble = null;
+    }
+
+    // Initialize Page
+    window.onload = () => {
+      loadHistoricalData().then(() => {
+        initWebSocket();
+      });
+    };
+  </script>
+</body>
+</html>

@@ -6,11 +6,46 @@ import time
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-try:
-    import anthropic
-except ImportError:
-    print("Error: 'anthropic' library not installed. Please run: pip install anthropic")
-    sys.exit(1)
+class OpenAICompatClient:
+    def __init__(self, api_key, base_url):
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        
+    class Messages:
+        def __init__(self, parent):
+            self.parent = parent
+            
+        def create(self, model, max_tokens, temperature, messages):
+            import requests
+            headers = {
+                "Authorization": f"Bearer {self.parent.api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature
+            }
+            url = f"{self.parent.base_url}/chat/completions"
+            response = requests.post(url, headers=headers, json=payload)
+            if response.status_code != 200:
+                raise RuntimeError(f"API Error ({response.status_code}): {response.text}")
+            
+            data = response.json()
+            text = data["choices"][0]["message"]["content"]
+            
+            class Content:
+                def __init__(self, t):
+                    self.text = t
+            class Response:
+                def __init__(self, t):
+                    self.content = [Content(t)]
+            return Response(text)
+
+    @property
+    def messages(self):
+        return self.Messages(self)
 
 # Curated pool of topics/domains for diversity in Turkish instruction generation
 KONU_HAVUZU = [
@@ -28,13 +63,21 @@ KONU_HAVUZU = [
     "seyahat planlama ve turizm önerileri"
 ]
 
-def get_client(api_key=None):
+def get_client(api_key=None, base_url=None):
     key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    url = base_url or os.environ.get("ANTHROPIC_BASE_URL")
     if not key:
-        print("Warning: ANTHROPIC_API_KEY environment variable not found.")
-        print("Please provide --api_key or set ANTHROPIC_API_KEY in your shell.")
+        print("Warning: API key variable not found.")
         return None
-    return anthropic.Anthropic(api_key=key)
+    if url:
+        print(f"Using OpenAI-compatible endpoint: {url}")
+        return OpenAICompatClient(key, url)
+    try:
+        import anthropic
+        return anthropic.Anthropic(api_key=key)
+    except ImportError:
+        print("Error: 'anthropic' library not installed. Standard client unavailable.")
+        return None
 
 def generate_instruction(client, topic, model="claude-3-5-sonnet-20241022"):
     prompt = f"""Gerçekçi bir Türkçe kullanıcısının bir yapay zekaya sorabileceği,
@@ -123,11 +166,12 @@ def worker_task(client, topic, mode, model):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate Senthetic Chat Dataset using Claude API (Magpie & Preference Pairs)")
-    parser.add_argument("--api_key", type=str, default=None, help="Anthropic API Key")
+    parser.add_argument("--api_key", type=str, default=None, help="API Key (Anthropic or OpenAI-compatible)")
+    parser.add_argument("--base_url", type=str, default=None, help="OpenAI-compatible Base URL")
     parser.add_argument("--num_samples", type=int, default=10, help="Number of samples to generate")
     parser.add_argument("--mode", type=str, choices=["sft", "orpo"], default="orpo", help="Dataset target mode (sft or orpo)")
     parser.add_argument("--output", type=str, default=None, help="Output path for JSONL data")
-    parser.add_argument("--model", type=str, default="claude-3-5-sonnet-20241022", help="Anthropic model version")
+    parser.add_argument("--model", type=str, default="claude-3-5-sonnet-20241022", help="Model name")
     parser.add_argument("--concurrency", type=int, default=3, help="Number of concurrent API request threads")
     args = parser.parse_args()
     
@@ -135,7 +179,7 @@ def main():
     if not args.output:
         args.output = f"shared/chat_data_{args.mode}.jsonl"
         
-    client = get_client(args.api_key)
+    client = get_client(args.api_key, args.base_url)
     if not client:
         # If API key is not present, we will write mock records as a fallback demonstration
         print("\n=== OFFLINE/DEMO MODE ===")

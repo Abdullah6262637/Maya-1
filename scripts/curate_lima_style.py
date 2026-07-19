@@ -47,6 +47,30 @@ def load_classifier(classifier_path):
         print(f"Error loading classifier: {e}")
         return None, None
 
+def is_refusal(text):
+    refusal_keywords = [
+        "i can't help", "i cannot help", "i apologize, but", "my safety guidelines", 
+        "cannot generate simulated", "geliştirme ortamıyım", "cannot fulfill",
+        "bypassing standard interaction"
+    ]
+    text_lower = text.lower()
+    for kw in refusal_keywords:
+        if kw in text_lower:
+            return True
+    return False
+
+def sanitize_record(r):
+    if isinstance(r, dict):
+        return {k: sanitize_record(v) for k, v in r.items()}
+    elif isinstance(r, list):
+        return [sanitize_record(v) for v in r]
+    elif isinstance(r, str):
+        r = r.replace("Kiro", "Maya")
+        r = r.replace("kiro", "maya")
+        r = r.replace("KIRO", "MAYA")
+        return r
+    return r
+
 def curate_dataset(args):
     print(f"Loading quality classifier from: {args.classifier_path}")
     clf, model_name = load_classifier(args.classifier_path)
@@ -70,14 +94,26 @@ def curate_dataset(args):
                 
     print(f"Total raw records loaded: {len(records)}")
     
+    # 1. Run refusal filtering and name sanitization
+    sanitized_records = []
+    skipped_refusals = 0
+    for r in records:
+        check_text = r.get("chosen", "") or r.get("response", "") or r.get("prompt", "")
+        if is_refusal(check_text):
+            skipped_refusals += 1
+            continue
+        sanitized_records.append(sanitize_record(r))
+        
+    print(f"Skipped {skipped_refusals} refusal/meta-response records during sanitization.")
+    print(f"Records after sanitization: {len(sanitized_records)}")
+    
     curated_records = []
     
-    if clf and embedder:
+    if clf and embedder and sanitized_records:
         print("Filtering records using Few-Shot Quality Classifier (threshold >= 0.70)...")
         # Extract prompt responses for quality filtering
         texts = []
-        for r in records:
-            # We evaluate the quality based on the response text
+        for r in sanitized_records:
             if "response" in r:
                 texts.append(r["response"])
             elif "chosen" in r:
@@ -89,15 +125,13 @@ def curate_dataset(args):
         embeddings = embedder.encode(texts)
         probabilities = clf.predict_proba(embeddings)[:, 1]  # Probabilities of class '1' (kaliteli)
         
-        for record, prob in zip(records, probabilities):
+        for record, prob in zip(sanitized_records, probabilities):
             if prob >= 0.70:
-                # Add quality score metadata
                 record["quality_score"] = float(prob)
                 curated_records.append(record)
     else:
-        # Fallback to keep everything if classifier is not found
-        print("No classifier loaded. Keeping all input records as-is.")
-        curated_records = records
+        print("No classifier loaded or no records left. Keeping all sanitized records as-is.")
+        curated_records = sanitized_records
         
     print(f"Accepted after filtering: {len(curated_records)} / {len(records)} records.")
     

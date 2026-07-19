@@ -1,0 +1,41 @@
+name: Python Integration Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository code
+      uses: actions/checkout@v4
+
+    - name: Set up Python environment
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: "pip"
+
+    - name: Install Rust toolchain (required for dataloader check)
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install CPU version of PyTorch for faster runner compilation
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install numpy==1.26.4 model2vec mup pandas joblib scikit-learn tokenizers requests fastapi uvicorn sse-starlette datasketch
+
+    - name: Run syntax and compile check
+      run: |
+        python -m py_compile python_training/model.py python_training/train.py python_training/orpo_train.py python_training/inference_server.py python_training/filter_quality.py
+
+    - name: Run full validation suite (pretraining, dataloading, database logging)
+      run: |
+        # Mark run_all_tests.sh as executable and run it
+        chmod +x scripts/run_all_tests.sh
+        ./scripts/run_all_tests.sh

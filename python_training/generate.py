@@ -53,7 +53,8 @@ def generate(
     temperature: float = 1.0, 
     top_k: int = 50, 
     top_p: float = 0.9,
-    stream: bool = True
+    stream: bool = True,
+    stop_token_ids = None
 ):
     device = next(model.parameters()).device
     
@@ -94,11 +95,11 @@ def generate(
             top_p=top_p
         )
         
-        # Stop on End of Sequence token if defined
+        # Stop on End of Sequence / Chat End tokens
         eos_id = tokenizer.token_to_id("</s>")
         if eos_id is None:
             eos_id = 2
-        if next_token_id == eos_id:
+        if next_token_id == eos_id or (stop_token_ids and next_token_id in stop_token_ids):
             break
             
         # Append token to input tensor
@@ -131,6 +132,7 @@ def main():
     parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
     parser.add_argument("--top_k", type=int, default=50, help="Top-K threshold")
     parser.add_argument("--top_p", type=float, default=0.9, help="Top-P threshold")
+    parser.add_argument("--chat", action="store_true", help="Format prompt and stop tokens for Chat/SFT models")
     
     args = parser.parse_args()
     
@@ -139,8 +141,8 @@ def main():
         raise FileNotFoundError(f"Tokenizer not found at {args.tokenizer}")
     tokenizer = Tokenizer.from_file(args.tokenizer)
     
-    # 2. Check if it is a directory (HF model directory) or contains 'sft_1b'
-    if os.path.isdir(args.checkpoint) or "sft_1b" in args.checkpoint:
+    # 2. Check if it is a directory (HF model directory)
+    if os.path.isdir(args.checkpoint) and not args.checkpoint.endswith(".pt"):
         from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
         print("Loading Maya-1 1.5B Model...")
         hf_tokenizer = AutoTokenizer.from_pretrained(args.checkpoint)
@@ -180,7 +182,7 @@ def main():
         
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Loading checkpoint weights from: {args.checkpoint} on {device.upper()}...")
-    checkpoint = torch.load(args.checkpoint, map_location=device)
+    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
     state_dict = checkpoint["model_state_dict"]
     
     # Clean state dict keys if checkpoint has '_orig_mod.' prefix from torch.compile
@@ -191,15 +193,43 @@ def main():
     vocab_size = embed_weight.shape[0]
     hidden_size = embed_weight.shape[1]
     
-    # Load Lua configuration dynamically
+    # Deduce num_hidden_layers
+    layer_indices = []
+    for k in clean_state_dict.keys():
+        parts = k.split(".")
+        for i, part in enumerate(parts):
+            if part == "layers" and i + 1 < len(parts):
+                try:
+                    layer_indices.append(int(parts[i+1]))
+                except ValueError:
+                    pass
+    num_hidden_layers = max(layer_indices) + 1 if layer_indices else 6
+    
+    # Deduce intermediate_size
+    intermediate_size = 5632
+    for k in clean_state_dict.keys():
+        if "feed_forward.w1.weight" in k:
+            intermediate_size = clean_state_dict[k].shape[0]
+            break
+            
+    # Deduce GQA dimensions
+    num_attention_heads = 32
+    num_key_value_heads = 8
+    if "layers.0.attention.wq.weight" in clean_state_dict and "layers.0.attention.wk.weight" in clean_state_dict:
+        wq_out = clean_state_dict["layers.0.attention.wq.weight"].shape[0]
+        wk_out = clean_state_dict["layers.0.attention.wk.weight"].shape[0]
+        head_dim = hidden_size // 8 if hidden_size < 2048 else 64
+        num_attention_heads = max(1, wq_out // head_dim)
+        num_key_value_heads = max(1, wk_out // head_dim)
+
+    # Load Lua configuration dynamically for max_seq_len fallback
     base_dir = os.path.dirname(__file__)
-    lua_cfg = parse_lua_file(os.path.join(base_dir, "config.lua"))
-    m_cfg = lua_cfg.get("model", {})
-    num_hidden_layers = m_cfg.get("num_hidden_layers", 6)
-    num_attention_heads = m_cfg.get("num_attention_heads", 8)
-    num_key_value_heads = m_cfg.get("num_key_value_heads", 2)
-    intermediate_size = m_cfg.get("intermediate_size", 512)
-    max_seq_len = m_cfg.get("seq_len", 128)
+    try:
+        lua_cfg = parse_lua_file(os.path.join(base_dir, "config.lua"))
+        m_cfg = lua_cfg.get("model", {})
+        max_seq_len = m_cfg.get("seq_len", 512)
+    except Exception:
+        max_seq_len = 512
 
     # Reconstruct MayaConfig
     # Detect if checkpoint has MTP weights
@@ -217,21 +247,41 @@ def main():
     )
     
     model = MayaModel(config)
+    
+    # Apply muP base shapes for scaling factor initialization
+    is_mup_model = hasattr(model.output, "width_mult") or any("feed_forward.w1" in name for name, _ in model.named_modules())
+    if is_mup_model:
+        try:
+            import mup
+            mup.set_base_shapes(model, None)
+        except Exception as e:
+            print(f"Warning: Could not set muP base shapes: {e}")
+            
     model.load_state_dict(clean_state_dict)
     model.to(device)
     model.eval()
     
-    print(f"\nPrompt: {args.prompt}")
+    prompt = args.prompt
+    stop_token_ids = []
+    if args.chat:
+        # Format using the standard Maya Chat template
+        prompt = f"<|sistem|>Sen Maya, yardımsever bir Türkçe asistansın.<|son|><|kullanici|>{args.prompt}<|son|><|asistan|>"
+        son_id = tokenizer.token_to_id("<|son|>")
+        if son_id is not None:
+            stop_token_ids.append(son_id)
+            
+    print(f"\nPrompt: {prompt}")
     print("Generation: ", end="")
     generate(
         model, 
         tokenizer, 
-        args.prompt, 
+        prompt, 
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
         top_k=args.top_k,
         top_p=args.top_p,
-        stream=True
+        stream=True,
+        stop_token_ids=stop_token_ids
     )
 
 if __name__ == "__main__":

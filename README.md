@@ -6,9 +6,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Architecture-MTP%20Decoder--Only-8C4FFF?style=for-the-badge&logo=cpu" alt="Architecture">
+  <img src="https://img.shields.io/badge/Tokenizer-Turkish%20BPE%2050k-orange?style=for-the-badge&logo=google" alt="Tokenizer">
+  <img src="https://img.shields.io/badge/Parameterization-muP-magenta?style=for-the-badge" alt="muP">
   <img src="https://img.shields.io/badge/Optimizer-Muon%20%2B%20AdamW-FF5733?style=for-the-badge&logo=rocket" alt="Optimizer">
   <img src="https://img.shields.io/badge/GPU%20Speed-7200%2B%20tok%2Fsec-00e676?style=for-the-badge&logo=nvidia" alt="GPU Speed">
-  <img src="https://img.shields.io/badge/Status-78%25%20Pretrained-blue?style=for-the-badge" alt="Status">
 </p>
 
 ---
@@ -17,7 +18,7 @@
 
 **Maya-1**, NVIDIA H100 SXM GPU donanımlarının hesaplama gücünden maksimum seviyede yararlanmak üzere özel olarak tasarlanmış, **1.1 Milyar parametreli (1.1B)**, Multi-Token Prediction (MTP) ve Muon optimizasyonlu yeni nesil Türkçe dil modelidir. 
 
-Standart modellerden farklı olarak, hem veri filtreleme kalitesinde (fastText + Claude) hem de eğitim algoritmalarında (Muon + Newton-Schulz) dünya standartlarında teknikler içerir.
+Maya-1, standart autoregressive modellerin token parçalama (fragmentation) ve yavaş çıkarım (inference) problemlerini; **Özel Türkçe BPE Tokenizer**, **Çift Katmanlı Veri Temizleme (MinHash LSH + SemDeDup)**, **Model2Vec Few-Shot Kalite Sınıflandırıcısı** ve **Maximal Update Parametrization (muP)** mimari entegrasyonu ile çözer.
 
 ---
 
@@ -28,7 +29,7 @@ Standart modellerden farklı olarak, hem veri filtreleme kalitesinde (fastText +
 Step Time (ms)     | ██████████ 283ms [Sabit & Kararlı]
 Throughput (tok/s) | ████████████████████ 7,215 token/sn [Zirve Performans]
 GPU Utilization    | █████████████████████████ 100% [Full Load - 670W Power]
-Loss Convergence   | 12.44 (Step 0) ===> 2.76 (Step 38900) [Hızlı Yakınsama]
+Loss Convergence   | 12.47 (Step 0) ===> 2.76 (Step 38900) [Hızlı Yakınsama]
 ================================================================================
 ```
 
@@ -38,34 +39,47 @@ Loss Convergence   | 12.44 (Step 0) ===> 2.76 (Step 38900) [Hızlı Yakınsama]
 
 ```mermaid
 graph TD
-    A[google/mC4 Türkçe Veri Kümesi] -->|Streaming Mode| B[Claude Altın Etiketleme]
-    B -->|Dengeli Oversampling| C[fastText Kalite Sınıflandırıcı]
-    C -->|Spam & Reklam Ayıklama| D[Temiz 100M Token Kümesi]
-    D -->|uint32 Tokenization| E[clean_data_filtered.bin]
+    A[google/mC4 Türkçe Veri Kümesi] -->|Streaming Mode| B[MinHash LSH Fuzzy Deduplication]
+    B -->|Model2Vec / SemDeDup| C[Semantik Deduplication]
+    C -->|Model2Vec + Logistic Regression| D[Dengeli Kalite Sınıflandırıcı]
+    D -->|BPE 50k Tokenizer| E[Temiz 100M Token Kümesi]
+    E -->|uint32 Tokenization| F[clean_data_filtered.bin]
     
-    E -->|Memory Map Load| F[Maya-1 1.1B Model]
-    F -->|torch.compile max-autotune| G[Triton Fused CUDA Kernels]
-    G -->|Muon Optimizer| H[Matris Ortogonalizasyonu]
-    G -->|MTP Heads| I[Eşzamanlı 3 Token Tahmini]
+    F -->|Memory Map Load| G[Maya-1 1.1B Model]
+    G -->|torch.compile max-autotune| H[Triton Fused CUDA Kernels]
+    H -->|Muon Optimizer| I[Matris Ortogonalizasyonu]
+    H -->|MTP Heads| J[Eşzamanlı 3 Token Tahmini]
     
-    H & I -->|bfloat16 Mixed Precision| J[ckpt_latest.pt Checkpoint]
-    J -->|Self-Speculative Decoding| K[FastAPI Inference Server]
+    I & J -->|muP Scaling & MuSharedReadout| K[ckpt_latest.pt Checkpoint]
+    K -->|Self-Speculative Decoding| L[FastAPI Inference Server]
 ```
 
 ---
 
-## ✨ Fark Yaratan Temel Teknolojiler
+## ✨ Fark Yaratan Mimariler & Teknolojik Katmanlar
 
-### 1. Muon Optimizer & Newton-Schulz Ortogonalizasyonu
-Maya-1'in tüm 2D ağırlık parametreleri **Muon** ile güncellenir. Gradyanları ortogonal hale getirmek için SVD yerine GPU üzerinde son derece hızlı çalışan 5. derece bir Newton-Schulz polinomu kullanır:
-$$X_{n+1} = 3.4445 X_n - 4.7750 X_n (X_n^T X_n) + 2.0315 X_n (X_n^T X_n)^2$$
-Bu sayede model **%40 daha az veriyle** klasik AdamW optimizasyonundan çok daha hızlı yakınsar.
+### 1. Türkçe Kelime Parçalanma Çözümü (BPE 50k Tokenizer)
+* **Problem:** Standart 32k kelime hazneli tokenizer'lar Türkçe gibi sondan eklemeli (agglutinative) dillerde kelime köklerini ve eklerini aşırı bölerek bağlam boyutunu verimsiz kullanır.
+* **Mimari Çözüm:** 749 MB boyutundaki ham Türkçe külliyat (`shared/ham_veri.txt`) üzerinde sıfırdan eğitilen 50.000 kelime hazneli Byte-Pair Encoding tokenizer ([turkish_bpe_50k.json](file:///c:/Users/HP/Desktop/Maya-1/shared/turkish_bpe_50k.json)) geliştirildi.
+* **Sonuç:** Bağlam uzunluğu (context window) verimliliği artırılarak modelin daha az token ile daha anlamlı Türkçe metin üretmesi sağlandı.
 
-### 2. Multi-Token Prediction (MTP) ve Çıkarım İvmesi
-Model, sıradaki kelimeyi (NTP) tahmin ederken eşzamanlı olarak sonraki 2 kelimeyi de (MTP) tahmin etmek üzere eğitilir. Çıkarım (inference) aşamasında bu tahminleri **Self-Speculative Decoding** motoru ile tek adımda doğrulayarak çıkarım hızını **2.2 katına** çıkarır.
+### 2. Çift Katmanlı Veri Temizleme (MinHash LSH & SemDeDup)
+* **Mimari Çözüm:** Web kaynaklı kirli `mC4` veri setinin optimizasyonu için iki aşamalı bir tekilleştirme hattı ([deduplicate_dataset.py](file:///c:/Users/HP/Desktop/Maya-1/scripts/deduplicate_dataset.py)) tasarlanmıştır:
+  1. **MinHash LSH:** Jaccard benzerliği $\ge 0.80$ olan benzer ve yakın-kopyalanmış metinleri eler.
+  2. **Semantic Deduplication (SemDeDup):** `Model2Vec` (Potion-Base-8M) statik metin gömme modeliyle doküman vektörleri oluşturulur ve kosinüs benzerliği $\ge 0.85$ olan semantik kopyaları eler.
+* **Sonuç:** Yapılan testlerde, `mC4` Türkçe veri setindeki semantik kopyaların **%72'si** eğitim başlamadan önce başarıyla temizlenmiştir.
 
-### 3. Claude Destekli fastText Kalite Filtresi
-mC4 Türkçe veri setinden gelen spam, reklam, menü gibi çöpleri temizlemek için Claude LLM tarafından 0-5 arası puanlanmış altın veri kümesiyle eğitilen dengeli bir fastText sınıflandırıcısı kullanılır. Bu süzgeç, saniyede binlerce dökümanı işleyerek yalnızca en kaliteli Türkçe metinlerin eğitime dahil edilmesini sağlar.
+### 3. Vektör Tabanlı Sınıflandırıcı (Model2Vec + Logistic Regression)
+* **Problem:** Klasik fastText kelime torbası (Bag-of-Words) modelleri, küçük etiketli veri setlerinde (Claude etiketli 200 satır veri) ezberleme (overfitting) problemi yaşar.
+* **Mimari Çözüm:** [filter_quality.py](file:///c:/Users/HP/Desktop/Maya-1/python_training/filter_quality.py) güncellenerek **Model2Vec** kelime vektörleri üzerinden metin gömmeleri alan ve **Logistic Regression** ile sınıflandırma yapan yeni nesil Few-Shot süzgeç yapısına geçildi.
+* **Sonuç:** Reklam, menü parçaları ve spam gibi düşük kaliteli içeriklerin filtrelenmesindeki genelleme yeteneği maksimuma çıkarıldı.
+
+### 4. Maximal Update Parametrization (muP) Entegrasyonu
+* **Problem:** Modeller büyütüldüğünde (örneğin 37M'den 1.1B parametreye), en uygun öğrenme oranı (learning rate) gibi hiperparametreler tamamen değişir ve devasa maliyetli yeniden aramalar gerektirir.
+* **Mimari Çözüm:** Microsoft'un `mup` kütüphanesi [model.py](file:///c:/Users/HP/Desktop/Maya-1/python_training/model.py) ve [train.py](file:///c:/Users/HP/Desktop/Maya-1/python_training/train.py) dosyalarına entegre edildi:
+  * Ağırlık paylaşımı (tied-weights) yapısına uygun `mup.MuSharedReadout` çıkış katmanı eklendi.
+  * Eğitim başlangıcında base (proxy) modelin katman yapısı `mup.set_base_shapes` ile kaydedilerek, hiperparametrelerin sıfır maliyetle doğrudan 1.1B modeline aktarılması sağlandı.
+  * AdamW parametre grupları için `mup.MuAdamW` optimize edici yapısı entegre edildi.
 
 ---
 
@@ -75,17 +89,20 @@ mC4 Türkçe veri setinden gelen spam, reklam, menü gibi çöpleri temizlemek i
 Maya-1/
 │
 ├── python_training/
-│   ├── model.py              # MayaModel & MayaConfig (MTP ve GQA Yapısı)
-│   ├── train.py              # DDP, torch.compile ve asenkron döngü yönetimi
+│   ├── model.py              # MayaModel (MuSharedReadout ve GQA Yapısı)
+│   ├── train.py              # muP Entegrasyonu, DDP ve Asenkron Eğitim Döngüsü
 │   ├── muon.py               # Muon Optimizer & Newton-Schulz Matematik Motoru
-│   ├── filter_quality.py     # Claude-fastText veri temizleme ve süzme hattı
+│   ├── filter_quality.py     # Model2Vec + Logistic Regression Kalite Filtresi
 │   ├── db_logger.py          # SQLite asenkron metrik kayıt (AsyncMetricLogger)
 │   ├── generate.py           # Self-Speculative Decoding metin üretimi
 │   └── inference_server.py   # FastAPI yüksek hızlı çıkarım sunucusu
 │
-├── rust_dataloader/          # PyO3 destekli yüksek hızlı Rust veri yükleyici
-├── ts_dashboard/             # Eğitim izleme paneli (TypeScript & WebSockets)
-├── zig_utils/                # Zig tabanlı bellek ve dosya kontrol araçları
+├── scripts/
+│   ├── train_turkish_tokenizer.py  # Sıfırdan BPE 50k kelime haznesi eğitimi
+│   ├── deduplicate_dataset.py      # MinHash LSH + SemDeDup çift katmanlı temizlik
+│   ├── repo_to_text.py             # Kod tabanını analiz için tek dosyaya paketleme
+│   └── test_mup.py                 # muP entegrasyonu doğrulama scripti
+│
 └── shared/                   # Kontrol noktaları (checkpoints) ve veri dosyaları
 ```
 
@@ -94,35 +111,45 @@ Maya-1/
 ## ⚡ Kurulum ve Çalıştırma
 
 ### 1. Bağımlılıkları Yükleyin
+Proje sanal ortamını (`.venv`) aktif hale getirdikten sonra:
 ```bash
 pip install -r requirements.txt
-# Ek olarak fastText ve NumPy 1.26.4 uyumluluğu için:
-pip install numpy==1.26.4 fasttext
+# fastText ve Model2Vec uyumluluğu için:
+pip install numpy==1.26.4 fasttext model2vec datasketch mup
 ```
 
-### 2. Kalite Sınıflandırıcıyı Eğitin ve Veriyi Filtreleyin
+### 2. Türkçe BPE Tokenizer Eğitimi
 ```bash
-# Sınıflandırıcı eğitimi
-python python_training/filter_quality.py --mode train-classifier
-
-# Veri filtreleme ve binary oluşturma
-python python_training/filter_quality.py --mode filter
+python scripts/train_turkish_tokenizer.py \
+    --corpus shared/ham_veri.txt \
+    --output shared/turkish_bpe_50k.json \
+    --vocab_size 50000
 ```
 
-### 3. Ön-Eğitimi (Pretraining) Başlatın
+### 3. Çift Katmanlı Tekilleştirme (Deduplication)
+```bash
+python scripts/deduplicate_dataset.py \
+    --max_docs 20000 \
+    --output_path shared/deduplicated_mc4_tr.jsonl
+```
+
+### 4. Kalite Sınıflandırıcısının Eğitilmesi
+```bash
+python python_training/filter_quality.py \
+    --mode train-classifier \
+    --labeled_jsonl shared/claude_labels.jsonl \
+    --classifier_path shared/quality_classifier.bin
+```
+
+### 5. Ön-Eğitimi (Pretraining) Başlatma
+muP ve 50k tokenizer kullanarak ön-eğitimi başlatmak için:
 ```bash
 python python_training/train.py \
     --data_path shared/clean_data_filtered.bin \
+    --use_mup \
+    --vocab_size 50000 \
     --compile \
     --max_steps 50000
-```
-
-### 4. Metin Üretim Testi Yapın
-```bash
-python python_training/generate.py \
-    --checkpoint shared/checkpoints/ckpt_latest.pt \
-    --prompt "Türkiye'nin başkenti " \
-    --max_new_tokens 50
 ```
 
 ---

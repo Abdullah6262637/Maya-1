@@ -159,10 +159,15 @@ class MayaModel(nn.Module):
 
         self.layers = nn.ModuleList([TransformerBlock(config) for _ in range(config.num_hidden_layers)])
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.output = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Shared embedding and output weight
-        self.tok_embeddings.weight = self.output.weight
+        
+        # Output Readout Layer
+        try:
+            import mup
+            self.output = mup.MuSharedReadout(self.tok_embeddings.weight, bias=False)
+        except ImportError:
+            self.output = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+            # Shared embedding and output weight
+            self.tok_embeddings.weight = self.output.weight
 
         # Precompute RoPE frequencies on CPU, will move to correct device during forward pass
         self.freqs_cis = precompute_freqs_cis(

@@ -151,15 +151,19 @@ VERİ:
     print(f"Claude labeling finished! Labeled file saved to {args.labeled_jsonl}")
 
 def train_classifier(args):
-    fasttext = get_fasttext()
-    
+    try:
+        from model2vec import StaticModel
+        from sklearn.linear_model import LogisticRegression
+        import joblib
+    except ImportError as e:
+        print(f"Error: Required packages not installed: {e}. Run 'pip install scikit-learn model2vec joblib'.")
+        sys.exit(1)
+        
     if not os.path.exists(args.labeled_jsonl):
         print(f"Error: Labeled data file not found at {args.labeled_jsonl}. Run with --mode sample-and-label first.")
         sys.exit(1)
         
-    print("Preparing training file for fastText...")
-    ft_train_path = args.labeled_jsonl + ".ft_train"
-    
+    print("Preparing training data from Claude labels...")
     # Read items
     items = []
     with open(args.labeled_jsonl, "r", encoding="utf-8") as fin:
@@ -180,39 +184,50 @@ def train_classifier(args):
     # Balance the dataset by oversampling kaliteli_items to match len(dusuk_items)
     if len(kaliteli_items) > 0 and len(dusuk_items) > 0:
         target_count = max(len(kaliteli_items), len(dusuk_items))
-        # Oversample kaliteli
         while len(kaliteli_items) < target_count:
             kaliteli_items.extend(kaliteli_items[:target_count - len(kaliteli_items)])
-        # Oversample dusuk
         while len(dusuk_items) < target_count:
             dusuk_items.extend(dusuk_items[:target_count - len(dusuk_items)])
             
     balanced_items = kaliteli_items + dusuk_items
     random.shuffle(balanced_items)
     
-    count = 0
-    with open(ft_train_path, "w", encoding="utf-8") as fout:
-        for item in balanced_items:
-            label = "__label__kaliteli" if item["puan"] >= 2 else "__label__dusuk"
-            metin = item["metin"].replace("\n", " ")[:2000]
-            fout.write(f"{label} {metin}\n")
-            count += 1
-            
-    print(f"Training fastText model on {count} balanced samples...")
-    # Train supervised fastText model
-    model = fasttext.train_supervised(
-        input=ft_train_path,
-        epoch=50,
-        lr=0.2,
-        wordNgrams=2,
-        dim=100
-    )
+    texts = [item["metin"] for item in balanced_items]
+    labels = [1 if item["puan"] >= 2 else 0 for item in balanced_items]
     
-    model.save_model(args.classifier_path)
+    print("Loading Model2Vec static model for text embeddings...")
+    try:
+        model = StaticModel.from_pretrained("minishlab/potion-base-8M")
+        model_name = "minishlab/potion-base-8M"
+    except Exception as e:
+        print(f"Failed to load potion-base-8M: {e}. Trying glove fallback...")
+        model = StaticModel.from_pretrained("minishlab/M2V_base_glove")
+        model_name = "minishlab/M2V_base_glove"
+        
+    print("Encoding texts to embeddings...")
+    X = model.encode(texts)
+    y = np.array(labels)
+    
+    print("Training Logistic Regression classifier...")
+    clf = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
+    clf.fit(X, y)
+    
+    # Save both classifier and the embedding model info
+    os.makedirs(os.path.dirname(args.classifier_path), exist_ok=True)
+    joblib.dump({
+        "classifier": clf,
+        "embedding_model_name": model_name
+    }, args.classifier_path)
     print(f"Classifier saved successfully to {args.classifier_path}")
 
 def filter_dataset(args):
-    fasttext = get_fasttext()
+    try:
+        from model2vec import StaticModel
+        import joblib
+    except ImportError as e:
+        print(f"Error: Required packages not installed: {e}. Run 'pip install model2vec joblib'.")
+        sys.exit(1)
+        
     datasets = get_datasets()
     tokenizer = get_tokenizer(args.tokenizer_path)
     
@@ -220,8 +235,16 @@ def filter_dataset(args):
         print(f"Error: Classifier model not found at {args.classifier_path}. Run with --mode train-classifier first.")
         sys.exit(1)
         
-    model = fasttext.load_model(args.classifier_path)
+    print("Loading classifier and embedding model...")
+    save_data = joblib.load(args.classifier_path)
+    clf = save_data["classifier"]
+    model_name = save_data.get("embedding_model_name", "minishlab/potion-base-8M")
     
+    try:
+        model = StaticModel.from_pretrained(model_name)
+    except Exception:
+        model = StaticModel.from_pretrained("minishlab/M2V_base_glove")
+        
     print("Loading mc4 Turkish dataset in streaming mode...")
     dataset = datasets.load_dataset("mc4", "tr", split="train", streaming=True, trust_remote_code=True)
     
@@ -242,11 +265,10 @@ def filter_dataset(args):
             if not metin:
                 continue
                 
-            # Clean metin format for classifier prediction
-            clean_text = metin.replace("\n", " ")[:2000]
-            label, confidence = model.predict(clean_text)
-            
-            is_high_quality = label[0] == "__label__kaliteli"
+            # Embed text and predict quality
+            emb = model.encode([metin[:2000]])
+            pred = clf.predict(emb)
+            is_high_quality = (pred[0] == 1)
             
             if is_high_quality:
                 total_accepted += 1

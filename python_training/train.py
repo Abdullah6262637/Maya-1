@@ -66,6 +66,8 @@ def parse_args():
     parser.add_argument("--muon_lr", type=float, default=0.02, help="Learning rate for Muon optimizer")
     parser.add_argument("--use_mtp", type=bool, default=True, help="Enable Multi-Token Prediction")
     parser.add_argument("--lambda_mtp", type=float, default=0.15, help="Auxiliary loss weight for MTP")
+    parser.add_argument("--use_mup", action="store_true", help="Enable Maximal Update Parametrization (μP)")
+    parser.add_argument("--mup_base_hidden", type=int, default=256, help="Hidden dimension of the proxy base model for μP")
     
     return parser.parse_args()
 
@@ -138,9 +140,9 @@ def main():
     # Choose bfloat16 if supported, else float16
     dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    # If on CPU, fall back to float32 or bfloat16
+    # If on CPU, fall back to float32 for fast CPU computation
     if device == "cpu":
-        dtype = torch.bfloat16
+        dtype = torch.float32
     
     if rank == 0:
         print(f"Using mixed precision data type: {dtype}")
@@ -162,6 +164,28 @@ def main():
     if rank == 0:
         print("Initializing Maya-1 model...")
     model = MayaModel(config)
+    
+    if args.use_mup:
+        import mup
+        if rank == 0:
+            print("Applying Maximal Update Parametrization (muP)...")
+        # Instantiate a small base shape proxy model
+        # Scale intermediate_size proportionally with hidden_size for mup scaling consistency
+        base_intermediate_size = max(1, int(args.intermediate_size * args.mup_base_hidden / args.hidden_size))
+        base_config = MayaConfig(
+            vocab_size=args.vocab_size,
+            hidden_size=args.mup_base_hidden,
+            num_hidden_layers=args.num_hidden_layers,
+            num_attention_heads=args.num_attention_heads,
+            num_key_value_heads=args.num_key_value_heads,
+            intermediate_size=base_intermediate_size,
+            max_seq_len=args.seq_len,
+            use_mtp=args.use_mtp,
+            lambda_mtp=args.lambda_mtp
+        )
+        base_model = MayaModel(base_config)
+        mup.set_base_shapes(model, base_model)
+        
     if rank == 0:
         print(f"Total model parameters: {model.estimate_parameter_count():,}")
     
@@ -213,7 +237,13 @@ def main():
     if len(muon_params) > 0:
         optimizers.append(Muon(muon_params, lr=args.muon_lr))
     if len(adamw_params) > 0:
-        optimizers.append(torch.optim.AdamW(adamw_params, lr=args.lr, fused=use_fused))
+        if args.use_mup:
+            import mup
+            if rank == 0:
+                print("Using MuAdamW for AdamW parameters under muP.")
+            optimizers.append(mup.MuAdamW(adamw_params, lr=args.lr, fused=use_fused))
+        else:
+            optimizers.append(torch.optim.AdamW(adamw_params, lr=args.lr, fused=use_fused))
 
     # Initialize Logger (Only Rank 0 writes to DB)
     logger = AsyncMetricLogger(node_id=args.node_id) if rank == 0 else None

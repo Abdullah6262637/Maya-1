@@ -13,15 +13,16 @@ echo -e "${YELLOW}==========================================================${NC
 echo -e "${YELLOW}      STARTING UNIX INTEGRATION VERIFICATION SUITE${NC}"
 echo -e "${YELLOW}==========================================================${NC}"
 
-# 1. Check Rust Dataloader Compilation
-echo -e "\n${YELLOW}[STEP 1] Checking Rust dataloader compile...${NC}"
+# 1. Check Rust Dataloader Compilation and Build Shared Library
+echo -e "\n${YELLOW}[STEP 1] Building Rust dataloader shared library...${NC}"
 pushd rust_dataloader > /dev/null
 export PYO3_PYTHON="python"
 export PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
 export CARGO_TARGET_DIR=".target"
-cargo check
+cargo build --release
+cp .target/release/librust_dataloader.so ../rust_dataloader.so
 popd > /dev/null
-echo -e "${GREEN}[SUCCESS] Rust module compilation check passed!${NC}"
+echo -e "${GREEN}[SUCCESS] Rust module compiled and copied successfully!${NC}"
 
 # 2. Run Data Preprocessing (Rust Tokenizer)
 echo -e "\n${YELLOW}[STEP 2] Launching Python + Rust preprocessing script...${NC}"

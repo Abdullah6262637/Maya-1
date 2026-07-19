@@ -21,7 +21,9 @@ jobs:
         cache: "pip"
 
     - name: Install Rust toolchain (required for dataloader check)
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
 
     - name: Install dependencies
       run: |

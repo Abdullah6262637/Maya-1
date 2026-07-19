@@ -10,9 +10,14 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     steps:
     - name: Checkout repository code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
 
     - name: Set up Python environment
       uses: actions/setup-python@v5
